@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>學校值班打卡系統</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; text-align: center; background-color: #f5f5f7; }
+    .card { background: white; max-width: 400px; margin: 20px auto; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    h2 { margin-bottom: 20px; color: #333; }
+    select, button { width: 100%; padding: 12px; margin: 10px 0; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; }
+    button { background-color: #007aff; color: white; border: none; font-weight: bold; cursor: pointer; }
+    button:disabled { background-color: #a2a2a2; cursor: not-allowed; }
+    .status { margin-top: 15px; font-size: 14px; padding: 10px; border-radius: 6px; white-space: pre-line; }
+    .success { background-color: #e6f4ea; color: #137333; }
+    .error { background-color: #fce8e6; color: #c5221f; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>🏫 學校值班打卡系統</h2>
+  
+  <div id="networkStatus" class="status">網絡狀態檢查中...</div>
+
+  <form id="clockForm" style="display:none; margin-top: 20px;">
+    <label for="employeeName" style="display:block; text-align:left; margin-bottom:5px;">選擇值班人員：</label>
+    <select id="employeeName" required>
+      <option value="">-- 請選擇姓名 --</option>
+      <!-- 請替換為您團隊 10 位人員的姓名 -->
+      <option value="樓菲">樓菲</option>
+      <option value="王韻瑄">王韻瑄</option>
+      <option value="吳渲祺">吳渲祺</option>
+	  <option value="王勁惟">王勁惟</option>
+	  <option value="黃穎豪">黃穎豪</option>
+	  <option value="黃謙宜">黃謙宜</option>
+	  <option value="逄紫庭">逄紫庭</option>
+	  <option value="趙晉敏">趙晉敏</option>
+	  <option value="王睿琪">王睿琪</option>
+    </select>
+
+    <button type="button" onclick="submitClock('上班')">☀️ 值班簽到（上班）</button>
+    <button type="button" onclick="submitClock('下班')" style="background-color: #34c759;">🌙 值班簽退（下班）</button>
+  </form>
+</div>
+
+<!-- ================= 核心邏輯腳本區塊 ================= -->
+<script>
+  // 1. 填入學校所有允許的固定外網 IP（個別 IP）
+  const ALLOWED_IPS = [
+    "140.116.1.100",  // 範例：行政區出口 IP
+    "140.116.1.101"   // 範例：教學區出口 IP
+  ];
+
+  // 2. 填入學校的 IP 網段開頭（適合整區學校 IP）
+  const ALLOWED_SUBNETS = [
+    "140.116.",  // 只要 IP 是 140.116. 開頭都算學校網路
+    "210.60."    // 另一個專線網段開頭
+  ];
+
+  // 3. 請貼上第一步在 Google Apps Script 取得的網址
+  const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbygqPDbz5lNc9JQ8PFmk54QV-QD81el8QoC6h2iCAYwTpgigJNcjcXnjhg35xwdS1LsKw/exec"; 
+
+  let userCurrentIp = "";
+
+  // 比對當前 IP 是否屬於學校網路
+  function isSchoolNetwork(ip) {
+    // 檢查是否在指定 IP 清單中
+    if (ALLOWED_IPS.includes(ip)) {
+      return true;
+    }
+    // 檢查是否符合學校網段開頭
+    for (let prefix of ALLOWED_SUBNETS) {
+      if (ip.startsWith(prefix)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // 檢查連線狀態
+  async function checkWifi() {
+    const statusDiv = document.getElementById("networkStatus");
+    try {
+      const res = await fetch("https://api.ipify.org?format=json");
+      const data = await res.json();
+      userCurrentIp = data.ip;
+
+      if (isSchoolNetwork(userCurrentIp)) {
+        statusDiv.className = "status success";
+        statusDiv.innerText = `✅ 已連線至學校 Wi-Fi，可進行打卡\n(當前 IP: ${userCurrentIp})`;
+        document.getElementById("clockForm").style.display = "block";
+      } else {
+        statusDiv.className = "status error";
+        statusDiv.innerText = `❌ 未連接學校 Wi-Fi，無法打卡\n(目前 IP: ${userCurrentIp})`;
+      }
+    } catch (e) {
+      statusDiv.className = "status error";
+      statusDiv.innerText = "⚠️ 網絡驗證失敗，請檢查網路連線";
+    }
+  }
+
+  // 發送打卡記錄至 Google Sheets
+  async function submitClock(type) {
+    const name = document.getElementById("employeeName").value;
+    if (!name) {
+      alert("請選擇您的姓名！");
+      return;
+    }
+
+    const payload = { name: name, type: type, ip: userCurrentIp };
+
+    try {
+      await fetch(GAS_WEB_APP_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      alert(`✅ ${name} [${type}] 打卡資料已送出！`);
+    } catch (error) {
+      alert("打卡失敗，請重新嘗試");
+    }
+  }
+
+  // 頁面開啟時自動進行 IP 檢查
+  checkWifi();
+</script>
+
+</body>
+</html>
